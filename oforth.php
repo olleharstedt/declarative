@@ -241,7 +241,6 @@ class Num extends Object_
             case '+':
                 $a = $stack->pop();
                 if ($a instanceof Num) {
-                    error_log("adding {$a->num} and {$this->num}");
                     $res = $a->num + $this->num;
                     $stack->push(new Num($res));
                     return;
