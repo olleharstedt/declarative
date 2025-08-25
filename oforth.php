@@ -1,5 +1,9 @@
 <?php
 
+/**
+ * $ php vendor/bin/phpstan analyze --level 8 oforth.php
+ */
+
 //require_once(__DIR__ . "/vendor/autoload.php");
 
 error_reporting(E_ALL);
@@ -263,7 +267,7 @@ class Word extends Object_
 
     public function toString(): string
     {
-        return $w;
+        return $this->w;
     }
 }
 
@@ -327,6 +331,44 @@ class Function_ extends Object_
         return sprintf("Function(%s)", $this->name->toString());
     }
 }
+
+class Class_ extends Object_
+{
+    public $val;
+    public function __construct($val)
+    {
+        $this->val = $val;
+    }
+
+    public function toString(): string
+    {
+        return sprintf("Class(%s)", $this->val);
+    }
+
+    public function receive(Stack_ $stack, Message $m)
+    {
+        switch ($m->messageName) {
+            case "new":
+                $n = $this->val;
+                // TODO hack for _
+                if ($n == "File") {
+                    $n = "File_";
+                } elseif ($n == "Function") {
+                    $n = "Function_";
+                }
+                $arg = $stack->pop();
+                if (class_exists($n)) {
+                    $c = new $n($arg);
+                    $stack->push($c);
+                } else {
+                    throw new Exception('Class does not exist: ' . $this->val);
+                }
+                return;
+        }
+        parent::receive($stack, $m);
+    }
+}
+
 
 // todo move to dict
 function isClass(string $word)
@@ -735,7 +777,7 @@ while (true) {
             $trace = $e->getTrace();
             foreach ($trace as $frame) {
                 $class = isset($frame['class']) ? $frame['class'] : '';
-                $function = isset($frame['function']) ? $frame['function'] : '';
+                $function = $frame['function'];
                 $file = isset($frame['file']) ? $frame['file'] : 'unknown';
                 $line = isset($frame['line']) ? $frame['line'] : '';
 

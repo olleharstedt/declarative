@@ -1,0 +1,6 @@
+{
+    "require": {
+        "latitude/latitude": "^4.2",
+        "phpstan/phpstan": "^2.1"
+    }
+}
