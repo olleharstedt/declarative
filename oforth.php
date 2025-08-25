@@ -267,7 +267,7 @@ class Word extends Object_
 
     public function toString(): string
     {
-        return $this->w;
+        return sprintf('Word(%s)', $this->w);
     }
 }
 
@@ -394,7 +394,7 @@ function parse_buffer(StringBuffer $buffer, Dicts $dicts, Stack_ $stack): Stack_
         } elseif ($dict->isString($word)) {
             $o = new String_(trim($word, '"'));
         } elseif ($word[0] === "'") {
-            $o = new Sym($word);
+            $o = new Sym(trim($word, "'"));
         } elseif ($dict->isSmalltalkMessage($word)) {
             $o = new Message(trim($word, ':'), $dicts);
         } elseif (isClass($word)) {
