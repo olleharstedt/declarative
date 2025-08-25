@@ -270,7 +270,7 @@ class Word extends Object_
         return sprintf('Word(%s)', $this->w);
     }
 
-    public function exec(): void
+    public function exec(Stack_ $stack, Stack_ $symstream): void
     {
     }
 }
@@ -291,7 +291,13 @@ class String_ extends Object_
 
     public function receive(Stack_ $stack, Message $m)
     {
-        parent::receive($stack, $m);
+        switch ($m->messageName) {
+            case "length":
+                $stack->push(new Num(strlen($this->val)));
+                return;
+            default:
+                parent::receive($stack, $m);
+        }
     }
 }
 
@@ -443,7 +449,7 @@ function eval_symbolstream(Stack_ $symbolstream)
             $prev = $stack->pop();
             $prev->receive($stack, $o);
         } else if ($o instanceof Word) {
-            $o->exec();
+            $o->exec($stack, $symbolstream);
         } else {
             $stack->push($o);
         }
