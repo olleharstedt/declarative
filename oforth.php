@@ -1,21 +1,9 @@
 <?php
 
-/**
- */
-
-require_once(__DIR__ . "/vendor/autoload.php");
+//require_once(__DIR__ . "/vendor/autoload.php");
 
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
-
-use Latitude\QueryBuilder\Engine\MySqlEngine;
-use Latitude\QueryBuilder\QueryFactory;
-use function Latitude\QueryBuilder\field;
-use function Latitude\QueryBuilder\group;
-use function Latitude\QueryBuilder\alias;
-use function Latitude\QueryBuilder\func;
-
-$queryBuilder = new QueryFactory(new MySqlEngine());
 
 class ReverseArrayIterator implements Iterator {
     private $array;
@@ -264,6 +252,21 @@ class Num extends Object_
     }
 }
 
+class Word extends Object_
+{
+    public string $w;
+
+    public function __construct($w)
+    {
+        $this->w = $w;
+    }
+
+    public function toString(): string
+    {
+        return $w;
+    }
+}
+
 class String_ extends Object_
 {
     public $val;
@@ -300,171 +303,6 @@ class Message extends Object_
 
     public function receive(Stack_ $stack, Message $m)
     {
-        parent::receive($stack, $m);
-    }
-}
-
-class Attribute_ extends Object_
-{
-    public function toString(): string
-    {
-        throw new Exception('Not implemented');
-    }
-    public function receive(Stack_ $stack, Message $m)
-    {
-        parent::receive($stack, $m);
-    }
-}
-
-class Entity extends Object_
-{
-    /** @var int */
-    public $id;
-
-    /** @var string 255 */
-    public $name;
-
-    /** @var string */
-    public $description;
-
-    /** @var DateTime */
-    public $created;
-
-    /** @var boolean */
-    public $archived;
-
-    /** @var string[] List of all names this entity is */
-    public $isA = [];
-
-    /** @var string[] List of all names this entity has */
-    public $hasA = [];
-
-    /** @var Attribute_[] */
-    public $attributes = [];
-
-    /** @param array<mixed> $data */
-    public static function make(array $data): self
-    {
-        $self = new self();
-        $self->id = (int) $data['id'];
-        $self->name = $data['name'];
-        $self->description = $data['description'];
-        $self->created = new DateTime($data['created']);
-        $self->archived = $data['archived'] ? true : false;
-        return $self;
-    }
-
-    public static function findByName(PDO $db, string $name): ?self
-    {
-        $sql = "SELECT * FROM entity WHERE name = :name";
-        $stmt = $db->prepare($sql);
-        $stmt->bindParam(':name', $name, PDO::PARAM_STR);
-        $stmt->execute();
-        $entity = $stmt->fetch(PDO::FETCH_ASSOC); // Fetch as an associative array
-        if ($entity) {
-            $self = self::make($entity);
-            // Fetch all is_a
-            $subject_id = (int) $entity['id'];
-            $sql = <<<SQL
-SELECT * FROM entity
-JOIN is_a ON entity.id = is_a.object_id AND is_a.subject_id = $subject_id
-SQL;
-            $stmt = $db->prepare($sql);
-            $stmt->execute();
-            $is = $stmt->fetchAll(PDO::FETCH_ASSOC); // Fetch all as associative arrays
-            foreach ($is as $i) {
-                $self->isA[] = $i['name'];
-            }
-
-            // Fetch attributes
-            $queryBuilder = new QueryFactory(new MySqlEngine());
-            $query = $queryBuilder
-                ->select('*')
-                ->from('attribute')
-                ->where(field('entity_id')->eq($entity['id']))
-                ->compile();
-            $stmt = $db->prepare($query->sql());
-            $stmt->execute($query->params());
-            $attrs = $stmt->fetchAll(PDO::FETCH_ASSOC);
-            foreach ($attrs as $att) {
-                //$entity['attribute'] = $attrs ?? [];
-                $self->attributes = Attribute_::make($att);
-            }
-            return $self;
-        }
-        return null;
-    }
-
-    public function toString(): string
-    {
-        throw new Exception('Not implemented');
-    }
-    public function receive(Stack_ $stack, Message $m)
-    {
-        parent::receive($stack, $m);
-    }
-}
-
-class Class_ extends Object_
-{
-    public $val;
-    public function __construct($val)
-    {
-        $this->val = $val;
-    }
-
-    public function toString(): string
-    {
-        return sprintf("Class(%s)", $this->val);
-    }
-
-    public function receive(Stack_ $stack, Message $m)
-    {
-        switch ($m->messageName) {
-            case "new":
-                $n = $this->val;
-                // TODO hack for _
-                if ($n == "File") {
-                    $n = "File_";
-                } elseif ($n == "Function") {
-                    $n = "Function_";
-                }
-                $arg = $stack->pop();
-                if (class_exists($n)) {
-                    $c = new $n($arg);
-                    $stack->push($c);
-                } else {
-                    throw new Exception('Class does not exist: ' . $this->val);
-                }
-                return;
-        }
-        parent::receive($stack, $m);
-    }
-}
-
-class File_ extends Object_
-{
-    public String_ $filename;
-
-    public function __construct(String_ $val)
-    {
-        $this->filename = $val;
-    }
-
-    public function toString(): string
-    {
-        return sprintf("File(%s)", $this->filename->toString());
-    }
-
-    public function receive(Stack_ $stack, Message $m)
-    {
-        switch ($m->messageName) {
-            case 'req':
-                printf("require_once(%s)\n", $this->filename->toString());
-                require_once($this->filename->val);
-                $stack->push($this);
-                return;
-        }
         parent::receive($stack, $m);
     }
 }
@@ -508,18 +346,19 @@ function parse_buffer(StringBuffer $buffer, Dicts $dicts, Stack_ $stack): Stack_
     $dict = $dicts->getCurrentDict();
     while ($word = $buffer->next()) {
         $o = null;
+        $firstChar = $word[0];
         if (ctype_digit($word)) {
             $o = new Num($word);
         } elseif ($dict->isString($word)) {
             $o = new String_(trim($word, '"'));
+        } elseif ($word[0] === "'") {
+            $o = new Sym($word);
         } elseif ($dict->isSmalltalkMessage($word)) {
             $o = new Message(trim($word, ':'), $dicts);
-        } elseif ($dict->isMessage($word)) {
-            $o = new Message($word, $dicts);
         } elseif (isClass($word)) {
             $o = new Class_($word);
         } else {
-            $o = new Sym($word);
+            $o = new Word($word);
         }
         /*
         $fn = $dicts->getWord($word);
@@ -603,11 +442,6 @@ class Dict extends ArrayObject
     public function isSmalltalkMessage($word)
     {
         return $word[strlen($word) -1] === ':';
-    }
-
-    public function isMessage($word)
-    {
-        return isset($this[$word]) && $this[$word] != null;
     }
 
     public function isString($word)
