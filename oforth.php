@@ -269,6 +269,10 @@ class Word extends Object_
     {
         return sprintf('Word(%s)', $this->w);
     }
+
+    public function exec(): void
+    {
+    }
 }
 
 class String_ extends Object_
@@ -438,6 +442,8 @@ function eval_symbolstream(Stack_ $symbolstream)
             // Get rid of prev on stack
             $prev = $stack->pop();
             $prev->receive($stack, $o);
+        } else if ($o instanceof Word) {
+            $o->exec();
         } else {
             $stack->push($o);
         }
@@ -470,23 +476,24 @@ function isGzipped($data) {
 
 class Dict extends ArrayObject
 {
-    public function addWord(string $word, callable $fn)
+    public $words = [];
+    public function addWord(Word $word)
     {
-        $this[$word] = $fn;
+        $this->words[$word->w] = $word;
     }
 
-    public function removeWord(string $word)
+    public function removeWord(Word $word)
     {
-        unset($this[$word]);
+        unset($this[$word->w]);
     }
 
     // Smalltalk messages end with ':'
-    public function isSmalltalkMessage($word)
+    public function isSmalltalkMessage(string $word)
     {
         return $word[strlen($word) -1] === ':';
     }
 
-    public function isString($word)
+    public function isString(string $word)
     {
         return $word[0] === '"' && $word[strlen($word) -1] === '"';
     }
@@ -534,213 +541,30 @@ class Array_ extends ArrayObject
     public $name;
 }
 
-// Memory to save variables etc in
-$mem = new ArrayObject();
-$dicts = new Dicts();
-
-// SQL dictionary
-$sqlDict = new Dict();
-$sqlDict->addWord('/', function($stack, $buffer, $word) {
-    $b = $stack->pop();
-    $a = $stack->pop();
-    $stack->push('(' . $a . ' / ' . $b . ')');
-});
-$sqlDict->addWord('-', function($stack, $buffer, $word) {
-    $b = $stack->pop();
-    $a = $stack->pop();
-    $stack->push('(' . $a . ' - ' . $b . ')');
-});
-$sqlDict->addWord('*', function($stack, $buffer, $word) {
-    $b = $stack->pop();
-    $a = $stack->pop();
-    $stack->push('(' . $a . ' * ' . $b . ')');
-});
-$sqlDict->addWord('round', function($stack, $buffer, $word) {
-    $b = $stack->pop();
-    $a = $stack->pop();
-    $stack->push('round(' . $a . ', ' . $b . ')');
-});
-$dicts->addDict('sql', $sqlDict);
-
-// PHP dictionary
-$phpDict = new Dict();
-$phpDict->addWord('count', function ($stack, $buffer, $word) use ($mem) {
-    $varName = $buffer->next();
-    $var = $mem[$varName];
-    $stack->push(count($var));
-});
-// TODO: Hard-coded variable?
-$phpDict->addWord('rows', function ($stack, $buffer, $word) use ($mem) {
-    $stack->push($word);
-});
-$phpDict->addWord('sum', function ($stack, $buffer, $word) use ($mem) {
-    $fieldName = $buffer->next();
-    $data = $stack->pop();
-    $sum = 0;
-    foreach ($data as $row) {
-        $sum += $row[$fieldName];
-    }
-    $stack->push($sum);
-});
-$phpDict->addWord('/', function($stack, $buffer, $word) {
-    $a = (float) $stack->pop();
-    $b = (float) $stack->pop();
-    $stack->push($b / $a);
-});
-$dicts->addDict('php', $phpDict);
-
-// Root words, available from all dictionaries
-$rootDict = new Dict();
-$rootDict->addWord('only', function ($stack, $buffer, $word) {
-    global $dicts;
-    $dictname = $buffer->next();
-    $dicts->setCurrent($dictname);
-});
-$rootDict->addWord('@', function($stack, $buffer, $word) use ($mem) {
-    $varname = $stack->pop();
-    $stack->push($mem[$varname]);
-});
-$rootDict->addWord('.', function ($stack, $buffer, $word) {
-    $a = $stack->pop();
-    echo $a;
-});
-$rootDict->addWord('drop', function ($stack, $buffer, $word) {
-    $stack->pop();
-});
-$rootDict->addWord('swap', function ($stack, $buffer, $word) use ($sqlDict) {
-    $a = $stack->pop();
-    $b = $stack->pop();
-    $stack->push($a);
-    $stack->push($b);
-});
-$dicts->addDict('root', $rootDict);
-
-// Main, default dictionary
-$mainDict = new Dict();
-$mainDict->addWord('swap', function ($stack, $buffer, $word) {
-    $a = $stack->pop();
-    $b = $stack->pop();
-    $stack->push($a);
-    $stack->push($b);
-});
-$mainDict->addWord('dup', function ($stack, $buffer, $word) {
-    $a = $stack->pop();
-    $stack->push(clone $a);
-    $stack->push(clone $a);
-});
-
-$mainDict->addWord('+', function ($stack, $buffer, $word) {
-    $a = $stack->pop();
-    $b = $stack->pop();
-    $stack->push($a + $b);
-});
-
-$mainDict->addWord('var', function($stack, $buffer, $word) use ($mem, $mainDict) {
-    $varName = $buffer->next();
-    $mainDict->addWord($varName, function($stack, $buffer, $word) use ($mem) {
-        $stack->push($word);
-    });
-});
-
-// Remove variable from memory
-$mainDict->addWord('unset', function($stack, $buffer, $word) use ($mem, $mainDict) {
-    $varName = $buffer->next();
-    unset($mem[$varName]);
-});
-
-$mainDict->addWord('const', function($stack, $buffer, $word) use ($mainDict) {
-    $value = $stack->pop();
-    $name = $buffer->next();
-    $mainDict->addWord($name, function($stack, $buffer, $word) use ($value) {
-        $stack->push($value);
-    });
-});
-$mainDict->addWord('new', function($stack, $buffer, $word) {
-    $type = $buffer->next();
-    switch ($type) {
-        case 'table':
-            // Fallthru
-        case 'array':
-            $stack->push(new ArrayObject());
-            break;
-        case 'list':
-            // Fallthru
-        case 'stack':
-            $stack->push(new Stack_());
-            break;
-        default:
-            throw new RuntimeException('Unknown type for new: ' . $type);
-    }
-});
-$mainDict->addWord('push', function($stack, $buffer, $word) use ($mainDict) {
-    $value = $stack->pop();
-    $s = $stack->pop();
-    $s->push($value);
-});
-$mainDict->addWord('pop', function($stack, $buffer, $word) use ($mainDict) {
-    $s   = $stack->pop();
-    $stack->push($s->pop());
-});
-$mainDict->addWord('set', function($stack, $buffer, $word) use ($mainDict) {
-    $value = $stack->pop();
-    $table = $stack->pop();
-    $key   = $buffer->next();
-    $table[$key] = $value;
-});
-$rootDict->addWord(':', function ($stack, $buffer, $word) use ($rootDict) {
-    $wordsToRun = [];
-    while (($w = $buffer->next()) !== ';') {
-        $wordsToRun[] = $w;
-    }
-
-    $name = $wordsToRun[0];
-    unset($wordsToRun[0]);
-
-    $rootDict->addWord($name, function ($stack, $buffer, $_word) use ($wordsToRun) {
-        global $dicts;
-        $b = new StringBuffer(implode(' ', $wordsToRun));
-        while ($word = $b->next()) {
-            // TODO: Add support for string
-            if (ctype_digit($word)) {
-                $stack->push($word);
-            } else {
-                $fn = $dicts->getWord($word);
-                if ($fn) {
-                    $fn($stack, $b, $word);
-                } else {
-                    throw new RuntimeException('Found no word inside : def: ' . $word);
-                }
-            }
-        }
-    });
-});
-$dicts->addDict('main', $mainDict);
-
-$dsn = 'mysql:host=localhost;dbname=fact2;charset=utf8mb4';
-$username = 'olle';
-$password = 'password';
-$db = new PDO($dsn, $username, $password);
-$db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-
 // OBS New dicts
 $dicts = new Dicts();
 $rootDict = new Dict();
 
 // Dot operator
-$rootDict->addWord('.', function ($stack, $buffer, $word) {
-    $a = $stack->pop();
-    echo $a;
-});
+//$rootDict->addWord('.', function ($stack, $buffer, $word) {
+    //$a = $stack->pop();
+    //echo $a;
+//});
 
 // todo <- ?
-$rootDict->addWord('swap', function(Stack_ $stack, StringBuffer $buffer, string $word) use ($rootDict, $db) {
+//$rootDict->addWord('if', function(Stack_ $stack, StringBuffer $buffer, string $word) use ($rootDict, $db) {
+    //error_log('if word executed');
+//});
+
+// todo <- ?
+//$rootDict->addWord('swap', function(Stack_ $stack, StringBuffer $buffer, string $word) use ($rootDict, $db) {
     // nothing
-});
+//});
 
 // todo use new:
-$rootDict->addWord('new', function(Stack_ $stack, StringBuffer $buffer, string $word) use ($rootDict, $db) {
+//$rootDict->addWord('new', function(Stack_ $stack, StringBuffer $buffer, string $word) use ($rootDict, $db) {
     // nothing
-});
+//});
 
 $dicts->addDict('root', $rootDict);
 
