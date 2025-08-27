@@ -15,4 +15,6 @@ Example code:
 ## Notes
 
     "Test string to stack"
-    if length: > 1 then "hello" echo:
+    if length: > 1 then "hello" echo: endif
+
+> 14:17 < vdupras> but hey, wait, isn't your proposal just syntactic sugar? If you make "if" into a noop, give "then" the meaning of traditional "if" and give "endif" the meaning of traditional then, you end up with pretty much what you want, without having to resort to stream peeking, right?
