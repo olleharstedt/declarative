@@ -259,9 +259,12 @@ class Word extends Object_
 {
     public string $w;
 
-    public function __construct($w)
+    public $lambda;
+
+    public function __construct($w, $lambda)
     {
         $this->w = $w;
+        $this->lambda = $lambda;
     }
 
     public function toString(): string
@@ -271,6 +274,7 @@ class Word extends Object_
 
     public function exec(Stack_ $stack, Stack_ $symstream): void
     {
+        $this->lambda($stack, $symstream);
     }
 }
 
@@ -485,9 +489,9 @@ function isGzipped($data) {
 class Dict extends ArrayObject
 {
     public $words = [];
-    public function addWord(Word $word)
+    public function addWord(string $word, $lambda)
     {
-        $this->words[$word->w] = $word;
+        $this->words[$word] = $lambda;
     }
 
     public function removeWord(Word $word)
