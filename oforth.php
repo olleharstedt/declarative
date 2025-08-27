@@ -556,9 +556,12 @@ $rootDict = new Dict();
     //echo $a;
 //});
 
-// todo <- ?
 //$rootDict->addWord('if', function(Stack_ $stack, StringBuffer $buffer, string $word) use ($rootDict, $db) {
     //error_log('if word executed');
+    // execute until end of line
+    // check if stack is true
+    // if true, execute next line until end of line
+    // TODO block?
 //});
 
 // todo <- ?
