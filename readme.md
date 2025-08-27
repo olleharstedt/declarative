@@ -15,4 +15,4 @@ Example code:
 ## Notes
 
     "Test string to stack"
-    if length: > 1
+    if length: > 1 then "hello" echo:

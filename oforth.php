@@ -276,9 +276,9 @@ class Word extends Object_
 
 class String_ extends Object_
 {
-    public $val;
+    public string $val;
 
-    public function __construct($val)
+    public function __construct(string $val)
     {
         $this->val = $val;
     }
@@ -293,6 +293,9 @@ class String_ extends Object_
         switch ($m->messageName) {
             case "length":
                 $stack->push(new Num(strlen($this->val)));
+                return;
+            case "echo":
+                echo $this->val;
                 return;
             default:
                 parent::receive($stack, $m);
@@ -556,13 +559,13 @@ $rootDict = new Dict();
     //echo $a;
 //});
 
-//$rootDict->addWord('if', function(Stack_ $stack, StringBuffer $buffer, string $word) use ($rootDict, $db) {
+//$rootDict->addWord('if', function(Stack_ $stack, StringBuffer $buffer, string $word) {
+$rootDict->addWord(new Word('if'));
     //error_log('if word executed');
-    // execute until end of line
+    // execute until `then`
     // check if stack is true
-    // if true, execute next line until end of line
+    // if true, execute from `then` to end of line
     // TODO block?
-//});
 
 // todo <- ?
 //$rootDict->addWord('swap', function(Stack_ $stack, StringBuffer $buffer, string $word) use ($rootDict, $db) {
@@ -578,7 +581,7 @@ $dicts->addDict('root', $rootDict);
 
 $stack = new Stack_();
 while (true) {
-    echo "? ";
+    echo "> ";
     $line = trim((string) fgets(STDIN)); // Read a line from stdin
 
     if (strtolower($line) === 'exit') {
@@ -591,7 +594,6 @@ while (true) {
             $symbolstream = parse_buffer(new StringBuffer($line), $dicts, $stack);
             $stack = eval_symbolstream($symbolstream);
             if ($stack->count() > 0) {
-                echo "> ";
                 foreach ($stack->getFifoIterator() as $o) {
                     echo $o->toString();
                     echo ' ';
